@@ -27,6 +27,8 @@ import static org.peyto.pdf.java.generator.entity.HtmlProvider.SourceHtmlType.PA
 
 public class HTMLToPDFConverterApplication {
 
+    private static final Pattern CSS_PATTERN = Pattern.compile("\\s*(.*?)\\s*\\{\\s*(.*?)\\s*\\}");
+
     public static void main(String[] args) {
         if (args.length < 1) {
             System.out.println("Usage: HTMLToPDFConverter <folderPath> [outputFileName]");
@@ -52,8 +54,6 @@ public class HTMLToPDFConverterApplication {
         }
     }
 
-    private static final Pattern pattern = Pattern.compile("\\s*(.*?)\\s*\\{\\s*(.*?)\\s*\\}");
-
     private static void processHTMLFiles(String folderPath, String outputFileName) throws IOException {
         JPackage files = FileCollector.collectHTMLFiles(folderPath);
         JavaProject parsedJavaProject = new JavaProject(files);
@@ -64,6 +64,7 @@ public class HTMLToPDFConverterApplication {
 
         List<Pair<String, SourceHtmlType>> tableOfContent = new ArrayList<>();
         Map<String, String> cssStyles = new HashMap<>();
+
         Element packageDiv = outputDocument.body().getElementById("package-hierarchy");
         for (HtmlProvider htmlProvider : parsedJavaProject.getOrderedNodes()) {
             Pair<String, Document> parsedClass = parseJavaFile(parsedJavaProject.getBasePackage(), htmlProvider);
@@ -75,7 +76,7 @@ public class HTMLToPDFConverterApplication {
                 tableOfContent.add(Pair.of(parsedClass.getLeft(), CLASS));
                 for (Element styleEl : parsedClass.getRight().select("head style")) {
                     String cssString = styleEl.html();
-                    Matcher matcher = pattern.matcher(cssString);
+                    Matcher matcher = CSS_PATTERN.matcher(cssString);
                     while (matcher.find()) {
                         String selector = matcher.group(1);
                         String style = matcher.group(2);
@@ -110,24 +111,27 @@ public class HTMLToPDFConverterApplication {
             if (displayName.isEmpty()) {
                 tocDiv.append("<br><a name=\"toc\" href=\"#" + uniqueId.trim() + "\"><b>" + basePackage + "</b></a>");
             } else {
-                StringBuilder dn = new StringBuilder();
-                for (int i = 0; i < (numberOfPackages(displayName) + 1) * 6; i++) {
-                    dn.append("&nbsp;");
-                }
-                dn.append(displayName);
-                tocDiv.append("<br><a href=\"#" + uniqueId.trim() + "\">" + (pckg ? "<b>" : "") + dn + (pckg ? "</b>" : "") + "</a>");
+                displayName = removeParentPackagesWithIntent(displayName);
+                tocDiv.append("<br><a href=\"#" + uniqueId.trim() + "\">" + (pckg ? "<b>" : "") + displayName + (pckg ? "</b>" : "") + "</a>");
             }
         }
     }
 
-    private static int numberOfPackages(String inputString) {
-        int dotCount = 0;
+    private static String removeParentPackagesWithIntent(String inputString) {
+        String intentStr = "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
+        StringBuilder result = new StringBuilder(intentStr);
         for (int i = 0; i < inputString.length(); i++) {
             if (inputString.charAt(i) == '.') {
-                dotCount++;
+                result.append("&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;");
             }
         }
-        return dotCount;
+        int last = inputString.lastIndexOf(".");
+        if (last != -1) {
+            result.append(inputString.substring(last + 1));
+        } else {
+            result.append(inputString);
+        }
+        return result.toString();
     }
 
     private static Pair<String, Document> parseJavaFile(String basePackage, HtmlProvider htmlProvider) {
@@ -141,7 +145,7 @@ public class HTMLToPDFConverterApplication {
             if (spanWithName == null) {
                 throw new RuntimeException("Wrong html structure");
             }
-            spanWithName.html("<a name=\"" + fullUniqueName+ "\">" + spanWithName.html() + "</a>");
+            spanWithName.html("<a name=\"" + fullUniqueName + "\">" + spanWithName.html() + "</a>");
 
             changeInternalLinks(currentPackageId, document);
             return Pair.of(fullUniqueName, document);
@@ -156,7 +160,7 @@ public class HTMLToPDFConverterApplication {
             document.body().prepend("<a " +
                     "name=\"" + currentPackageId + "\" " +
                     "href=\"#" + parentPackageId + "\">" +
-                        "<span>" + parentPackageAndCurrentPackage.getLeft() + "</span></a>." + parentPackageAndCurrentPackage.getRight() + "<br><br>");
+                    "<span>" + parentPackageAndCurrentPackage.getLeft() + "</span></a>." + parentPackageAndCurrentPackage.getRight() + "<br><br>");
             Elements allLinks = document.body().getElementsByTag("a");
             List<Element> links = allLinks.stream().filter(element -> element.hasAttr("href")).collect(Collectors.toList());
             for (Element aLinkElement : links) {
@@ -171,7 +175,7 @@ public class HTMLToPDFConverterApplication {
     private static Pair<String, String> calculateParentPackageName(String packageName) {
         int i = packageName.lastIndexOf(".");
         if (i != -1) {
-            return Pair.of(packageName.substring(0, i), packageName.substring(i+1));
+            return Pair.of(packageName.substring(0, i), packageName.substring(i + 1));
         } else {
             return Pair.of(null, packageName);
         }
@@ -206,7 +210,7 @@ public class HTMLToPDFConverterApplication {
 
         int totalLength = fullPath.length;
         int i = 0;
-        while (i < totalLength-1) {
+        while (i < totalLength - 1) {
             if ("..".equals(fullPath[i + 1])) {
                 if (0 < totalLength - i - 2) {
                     System.arraycopy(fullPath, i + 2, fullPath, i, totalLength - i - 2);
