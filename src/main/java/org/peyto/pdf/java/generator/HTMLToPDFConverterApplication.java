@@ -14,10 +14,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -28,16 +25,6 @@ import static org.peyto.pdf.java.generator.entity.HtmlProvider.SourceHtmlType.PA
 public class HTMLToPDFConverterApplication {
 
     private static final Pattern CSS_PATTERN = Pattern.compile("\\.\\s*(.*?)\\s*\\{\\s*(.*?)\\s*\\}");
-    private static final Map<String, String> DEFAULT_CODE_STYLES = new HashMap<>();
-    static {
-        DEFAULT_CODE_STYLES.put("s0", "color: #0033b3;");
-        DEFAULT_CODE_STYLES.put("s1", "color: #080808;");
-        DEFAULT_CODE_STYLES.put("s2", "color: #067d17;");
-        DEFAULT_CODE_STYLES.put("s3", "color: #0037a6;");
-        DEFAULT_CODE_STYLES.put("s4", "color: #1750eb;");
-        DEFAULT_CODE_STYLES.put("s5", "color: #8c8c8c; font-style: italic;");
-        DEFAULT_CODE_STYLES.put("ln", "color: #adadad; font-weight: normal; font-style: normal;");
-    }
 
     public static void main(String[] args) {
         if (args.length < 1) {
@@ -73,12 +60,11 @@ public class HTMLToPDFConverterApplication {
         String pageBreakDiv = "<div class=\"page-break\"></div> \n";
 
         List<Pair<String, SourceHtmlType>> tableOfContent = new ArrayList<>();
-        Map<String, String> cssCodeClasses = new HashMap<>();
-        DEFAULT_CODE_STYLES.forEach((key, value) -> cssCodeClasses.put(value, key));
+        Map<String, String> cssCodeStyles = new HashMap<>();
 
         Element packageDiv = outputDocument.body().getElementById("package-hierarchy");
         for (HtmlProvider htmlProvider : parsedJavaProject.getOrderedNodes()) {
-            Pair<String, Document> parsedClass = parseJavaFile(parsedJavaProject.getBasePackage(), htmlProvider, cssCodeClasses);
+            Pair<String, Document> parsedClass = parseJavaFile(parsedJavaProject.getBasePackage(), htmlProvider, cssCodeStyles);
             if (htmlProvider.sourceHtmlType() == PACKAGE) {
                 tableOfContent.add(Pair.of(parsedClass.getLeft(), PACKAGE));
                 packageDiv.append(pageBreakDiv);
@@ -88,6 +74,10 @@ public class HTMLToPDFConverterApplication {
                 outputDocument.body().append(pageBreakDiv);
                 outputDocument.body().append(parsedClass.getRight().body().html());
             }
+        }
+
+        for (Map.Entry<String, String> style : cssCodeStyles.entrySet()) {
+            outputDocument.head().appendElement("style").text("."+style.getKey() + " { " + style.getValue() + " }");
         }
 
         generateTableOfContent(outputDocument, parsedJavaProject.getBasePackage(), tableOfContent);
@@ -132,7 +122,7 @@ public class HTMLToPDFConverterApplication {
         return result.toString();
     }
 
-    private static Pair<String, Document> parseJavaFile(String basePackage, HtmlProvider htmlProvider, Map<String, String> cssCodeClasses) {
+    private static Pair<String, Document> parseJavaFile(String basePackage, HtmlProvider htmlProvider, Map<String, String> cssCodeStyles) {
         Document document = parseHTML(htmlProvider.getHtmlFile());
         String currentPackageId;
         if (htmlProvider.sourceHtmlType() == CLASS) {
@@ -146,7 +136,7 @@ public class HTMLToPDFConverterApplication {
             spanWithName.html("<a name=\"" + fullUniqueName + "\">" + spanWithName.html() + "</a>");
 
             changeInternalLinks(currentPackageId, document);
-            changeInternalCssCodeClasses(document, cssCodeClasses);
+            changeInternalCssCodeClasses(document, cssCodeStyles);
             return Pair.of(fullUniqueName, document);
         } else {
             String packageName = document.getElementsByTag("title").get(0).text();
@@ -171,8 +161,46 @@ public class HTMLToPDFConverterApplication {
         }
     }
 
-    private static void changeInternalCssCodeClasses(Document document, Map<String, String> cssCodeClasses) {
+    private static void changeInternalCssCodeClasses(Document document, Map<String, String> cssCodeStyles) {
         // s0 -> color, s1 -> color
+        Map<String, String> internalParsedClasses = parseStyles(document);
+        Map<String, String> cssCodeStylesInverted = new HashMap<>();
+        cssCodeStyles.forEach((key, value) -> cssCodeStylesInverted.put(value, key));
+        Map<String, String> oldClassToNewClassMapping = new HashMap<>();
+        internalParsedClasses.forEach((classNameInParsedFile, classStyle) -> {
+            String newClassName = cssCodeStylesInverted.get(classStyle);
+            if (newClassName == null) {
+                String newUniqueClassName = getNewUniqueClassName(cssCodeStyles.keySet(), classNameInParsedFile);
+                cssCodeStyles.put(newUniqueClassName, classStyle);
+            } else {
+                if (!newClassName.equals(classNameInParsedFile)) {
+                    oldClassToNewClassMapping.put(classNameInParsedFile, cssCodeStylesInverted.get(classStyle));
+                }
+            }
+        });
+
+        document.getElementsByTag("span")
+                .forEach(element -> {
+                    String oldClass = element.attr("class");
+                    if (oldClassToNewClassMapping.containsKey(oldClass)) {
+                        element.attr("class", oldClassToNewClassMapping.get(oldClass));
+                    }
+                });
+    }
+
+    private static String getNewUniqueClassName(Set<String> existingKeys, String desiredKey) {
+        if (!existingKeys.contains(desiredKey)) {
+            return desiredKey;
+        }
+        String generated;
+        int i = 0;
+        do {
+            generated = "g" + i++;
+        } while (existingKeys.contains(generated));
+        return generated;
+    }
+
+    private static Map<String, String> parseStyles(Document document) {
         Map<String, String> internalParsedClasses = new HashMap<>();
         for (Element styleEl : document.select("head style")) {
             String cssString = styleEl.html();
@@ -183,21 +211,7 @@ public class HTMLToPDFConverterApplication {
                 internalParsedClasses.put(selector, style);
             }
         }
-        Map<String, String> oldClassToNewClassMapping = new HashMap<>();
-        internalParsedClasses.forEach((className, classStyle) -> {
-            String newClassName = cssCodeClasses.get(classStyle);
-            if (newClassName != null && !newClassName.equals(className)) {
-                oldClassToNewClassMapping.put(className, cssCodeClasses.get(classStyle));
-            }
-        });
-
-        document.getElementsByTag("span").stream()
-                .forEach(element -> {
-                    String oldClass = element.attr("class");
-                    if (oldClassToNewClassMapping.containsKey(oldClass)) {
-                        element.attr("class", oldClassToNewClassMapping.get(oldClass));
-                    }
-                });
+        return internalParsedClasses;
     }
 
     private static Pair<String, String> calculateParentPackageName(String packageName) {
@@ -321,9 +335,6 @@ public class HTMLToPDFConverterApplication {
         outputDocument.head().appendElement("style").text(cssContent1);
         outputDocument.head().appendElement("style").text(cssContent2);
         outputDocument.head().appendElement("style").text(cssContent3);
-        for (Map.Entry<String, String> style : DEFAULT_CODE_STYLES.entrySet()) {
-            outputDocument.head().appendElement("style").text("."+style.getKey() + " { " + style.getValue() + " }");
-        }
 
         return outputDocument;
     }
