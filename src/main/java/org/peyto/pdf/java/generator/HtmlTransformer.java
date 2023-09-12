@@ -7,8 +7,6 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.peyto.pdf.java.generator.entity.HtmlFileSupplier;
 import org.peyto.pdf.java.generator.entity.JavaProject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -33,13 +31,13 @@ public class HtmlTransformer {
         List<Pair<String, HtmlFileSupplier.SourceHtmlType>> tableOfContent = new ArrayList<>();
         Map<String, String> cssCodeStyles = new HashMap<>();
 
-        Element packageDiv = outputDocument.body().getElementById("package-hierarchy");
+        Element packagesDiv = outputDocument.body().getElementById("package-hierarchy");
         for (HtmlFileSupplier htmlFileSupplier : parsedJavaProject.getOrderedNodes()) {
             Pair<String, Element> parsedFile = parseHtmlCodeFileAndTransform(parsedJavaProject.getBasePackage(), htmlFileSupplier, cssCodeStyles);
             if (htmlFileSupplier.sourceHtmlType() == PACKAGE) {
                 tableOfContent.add(Pair.of(parsedFile.getLeft(), PACKAGE));
-                packageDiv.append(PAGE_BREAK_DIV_TEMPLATE);
-                packageDiv.append(parsedFile.getRight().html());
+                packagesDiv.append(PAGE_BREAK_DIV_TEMPLATE);
+                packagesDiv.append(parsedFile.getRight().html());
             } else {
                 tableOfContent.add(Pair.of(parsedFile.getLeft(), CLASS));
                 outputDocument.body().append(PAGE_BREAK_DIV_TEMPLATE);
@@ -51,7 +49,7 @@ public class HtmlTransformer {
             outputDocument.head().appendElement("style").text("." + style.getKey() + " { " + style.getValue() + " }");
         }
 
-        generateTableOfContent(outputDocument.body().getElementById("toc"), parsedJavaProject.getBasePackage(), tableOfContent);
+        generateTableOfContent(outputDocument.body().getElementById("tocDiv"), parsedJavaProject.getBasePackage(), tableOfContent);
 
         return outputDocument.outerHtml();
     }
@@ -68,7 +66,8 @@ public class HtmlTransformer {
         String currentPackageId;
         if (htmlFileSupplier.sourceHtmlType() == CLASS) {
             currentPackageId = makePackageLink(document);
-            String fullUniqueName = createClassAnchor(htmlFileSupplier, document, currentPackageId);
+            removeLinkNames(document);
+            String fullUniqueName = createClassAnchor(htmlFileSupplier.getName(), document, currentPackageId);
             transformInternalLinks(currentPackageId, document, false);
             transformInternalCssCodeClasses(document, cssCodeStyles);
             return Pair.of(fullUniqueName, document.body());
@@ -82,8 +81,13 @@ public class HtmlTransformer {
         }
     }
 
-    private static String createClassAnchor(HtmlFileSupplier htmlFileSupplier, Document document, String currentPackageId) {
-        String fullUniqueName = currentPackageId + "-" + htmlFileSupplier.getName();
+    private static void removeLinkNames(Document document) {
+        Elements allLinks = document.body().getElementsByTag("a");
+        allLinks.stream().filter(element -> element.hasAttr("name")).forEach(element -> element.removeAttr("name"));
+    }
+
+    private static String createClassAnchor(String className, Document document, String currentPackageId) {
+        String fullUniqueName = currentPackageId + "-" + className;
 
         Element spanWithName = document.select("table center").first();
         if (spanWithName == null) {
@@ -327,7 +331,7 @@ public class HtmlTransformer {
                 "<html>" +
                         "<head></head>" +
                         "<body>" +
-                        "<div id=\"toc\"></div>" +
+                        "<div id=\"tocDiv\"></div>" +
                         "<div id=\"package-hierarchy\"></div>" +
                         "</body>" +
                         "</html>");
