@@ -2,10 +2,14 @@ package org.peyto.pdf.java.generator;
 
 import org.peyto.pdf.java.generator.entity.JClass;
 import org.peyto.pdf.java.generator.entity.JPackage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 
 public class FileCollector {
+
+    private static final Logger log = LoggerFactory.getLogger(FileCollector.class);
 
     public static JPackage collectHTMLFiles(String rootFolderPath) {
         File rootFolder = new File(rootFolderPath);
@@ -36,8 +40,19 @@ public class FileCollector {
                             String javaClassName = file.getName().substring(0, file.getName().length() - 10);
                             JClass jClass = new JClass(javaClassName, file);
                             parentPackage.addChildClass(jClass);
+                        } else if (file.getName().endsWith(".html")) {
+                            // any other code file, e.g., js file, py file
+                            String fileWithExtensionName = file.getName().substring(0, file.getName().length() - 5);
+                            int lastExt = fileWithExtensionName.lastIndexOf(".");
+                            if (lastExt != -1) {
+                                String name = fileWithExtensionName.substring(0, lastExt - 1);
+                                JClass jClass = new JClass(name, file);
+                                parentPackage.addChildClass(jClass);
+                            } else {
+                                log.error("Unknown file without extension: {}", file.getAbsolutePath());
+                            }
                         } else {
-                            System.err.println("Unknown file: " + file.getAbsolutePath());
+                            log.error("Unknown file without html suffix: {}", file.getAbsolutePath());
                         }
                     }
                 }

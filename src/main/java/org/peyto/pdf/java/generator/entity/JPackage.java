@@ -4,7 +4,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
-public class JPackage implements HtmlProvider {
+public class JPackage implements HtmlFileSupplier {
 
     private final String name;
     private File htmlFile;

@@ -1,7 +1,10 @@
 # pdf-java-generator
 
 ## Usage
-./app.jar <FOLDER_TO_GENERATE>
-TODO Write in details
+HTMLToPDFConverterApplication <FOLDER_TO_GENERATE>
+
+<br>
+java -jar pdf-java-generator-1.0-SNAPSHOT-jar-with-dependencies.jar exportToHtml
+
 
 ### Known issues

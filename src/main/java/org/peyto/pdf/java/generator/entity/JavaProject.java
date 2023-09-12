@@ -1,10 +1,15 @@
 package org.peyto.pdf.java.generator.entity;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
 public class JavaProject {
+
+    private static final Logger log = LoggerFactory.getLogger(JavaProject.class);
 
     private final String basePackage;
     private final JPackage rootPackage;
@@ -35,13 +40,40 @@ public class JavaProject {
         return basePackage;
     }
 
-    public JPackage getRootPackage() {
-        return rootPackage;
+    public int getNumberOfPackages() {
+        return getNumberOfPackages(rootPackage);
+    }
+
+    public int getNumberOfClasses() {
+        return getNumberOfClasses(rootPackage);
+    }
+
+    public List<HtmlFileSupplier> getOrderedNodes() {
+        List<HtmlFileSupplier> orderedNodes = new ArrayList<>();
+        collectOrderedNodes(rootPackage, orderedNodes);
+        return orderedNodes;
+    }
+
+    private int getNumberOfPackages(JPackage rootPackage) {
+        int i = 1;
+        for (JPackage childPackage : rootPackage.getChildPackages()) {
+            i = i + getNumberOfPackages(childPackage);
+        }
+        return i;
+    }
+
+    private int getNumberOfClasses(JPackage rootPackage) {
+        int i = rootPackage.getChildClasses().size();
+        for (JPackage childPackage : rootPackage.getChildPackages()) {
+            i = i + getNumberOfClasses(childPackage);
+        }
+        return i;
     }
 
     public void print() {
+        log.info("JavaProject content:");
         for (String line : getTableOfContent()) {
-            System.out.println(line); // Print or process the table of contents as needed
+            log.info(line);
         }
     }
 
@@ -67,28 +99,7 @@ public class JavaProject {
         }
     }
 
-    private void printPackage(JPackage jPackage, int indentLevel) {
-        StringBuilder indentation = new StringBuilder();
-        for (int i = 0; i < indentLevel; i++) {
-            indentation.append("  "); // Two spaces per level
-        }
-
-        for (JPackage childPackage : jPackage.getChildPackages()) {
-            System.out.println(indentation + childPackage.getName());
-            printPackage(childPackage, indentLevel + 1);
-        }
-        for (JClass jClass : jPackage.getChildClasses()) {
-            System.out.println(indentation + "  " + jClass.getName());
-        }
-    }
-
-    public List<HtmlProvider> getOrderedNodes() {
-        List<HtmlProvider> orderedNodes = new ArrayList<>();
-        collectOrderedNodes(rootPackage, orderedNodes);
-        return orderedNodes;
-    }
-
-    private void collectOrderedNodes(JPackage jPackage, List<HtmlProvider> orderedNodes) {
+    private void collectOrderedNodes(JPackage jPackage, List<HtmlFileSupplier> orderedNodes) {
         orderedNodes.add(jPackage);
         List<JPackage> childPackages = jPackage.getChildPackages();
         List<JClass> childClasses = jPackage.getChildClasses();

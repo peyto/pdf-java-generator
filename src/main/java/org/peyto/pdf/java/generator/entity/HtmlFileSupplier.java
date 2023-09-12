@@ -2,7 +2,7 @@ package org.peyto.pdf.java.generator.entity;
 
 import java.io.File;
 
-public interface HtmlProvider {
+public interface HtmlFileSupplier {
 
     String getName();
 
